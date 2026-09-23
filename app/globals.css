@@ -175,7 +175,8 @@ label.field {
   color: var(--faint);
 }
 
-.api-field { margin-bottom: 14px; }
+.api-field { margin-bottom: 6px; }
+.api-note { margin: 0 0 14px; }
 
 input[type="text"], input[type="password"], textarea {
   width: 100%;

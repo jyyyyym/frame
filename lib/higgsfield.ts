@@ -1,3 +1,5 @@
+import { credentialProblem, normalizeCredentials } from "@/lib/credentials";
+
 const API = "https://api.higgsfield.ai";
 
 const TEXT_MODEL = "bytedance/seedance-2.5/text-to-video";
@@ -24,15 +26,9 @@ export class HttpError extends Error {
 }
 
 export function readCredentials(request: Request): string {
-  let raw = request.headers.get("x-hf-credentials")?.trim() ?? "";
-  if (/^key\s+/i.test(raw)) raw = raw.replace(/^key\s+/i, "").trim();
-  const sep = raw.indexOf(":");
-  if (sep <= 0 || sep >= raw.length - 1) {
-    throw new HttpError(
-      401,
-      "API 키를 넣어 주세요. 콘솔에서 복사한 KEY_ID:KEY_SECRET 한 줄을 그대로 붙여 넣으면 됩니다.",
-    );
-  }
+  const raw = normalizeCredentials(request.headers.get("x-hf-credentials") ?? "");
+  const problem = credentialProblem(raw);
+  if (problem) throw new HttpError(401, problem);
   if (raw.length > 400) {
     throw new HttpError(400, "자격 증명이 너무 깁니다.");
   }

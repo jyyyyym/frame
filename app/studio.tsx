@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { credentialProblem, normalizeCredentials } from "@/lib/credentials";
 import { zipStored } from "@/lib/zip";
 
 type Mode = "text" | "image";
@@ -79,7 +80,7 @@ export default function Studio() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const pollToken = useRef(0);
 
-  const credentials = apiKey.trim();
+  const credentials = normalizeCredentials(apiKey);
 
   const active = shots.find((shot) => shot.id === activeId) ?? null;
 
@@ -170,8 +171,9 @@ export default function Studio() {
 
   async function generate() {
     setError("");
-    if (!credentials.includes(":")) {
-      setError("API 키를 넣어 주세요. 콘솔에서 복사한 한 줄을 그대로 붙여 넣으면 됩니다.");
+    const problem = credentialProblem(credentials);
+    if (problem) {
+      setError(problem);
       return;
     }
     if (mode === "text" && !prompt.trim()) {
@@ -274,9 +276,8 @@ export default function Studio() {
     if (!shot.requestId) {
       throw new Error("이 영상 주소를 더 이상 찾을 수 없습니다.");
     }
-    if (!credentials.includes(":")) {
-      throw new Error("영상을 받으려면 위의 API 키를 다시 넣어 주세요.");
-    }
+    const problem = credentialProblem(credentials);
+    if (problem) throw new Error(problem);
     const response = await fetch(`/api/download?requestId=${encodeURIComponent(shot.requestId)}`, {
       headers: { "x-hf-credentials": credentials },
     });
@@ -345,14 +346,15 @@ export default function Studio() {
           <label className="field api-field">
             API
             <input
-              type="password"
+              type="text"
               autoComplete="off"
               spellCheck={false}
               value={apiKey}
-              placeholder="쓸 때마다 키 한 줄을 붙여 넣으세요"
+              placeholder="key_id:key_secret"
               onChange={(event) => setApiKey(event.target.value)}
             />
           </label>
+          <p className="note api-note">콘솔의 Key ID와 Secret을 콜론으로 이어 넣습니다. 예: abcd1234:secret5678</p>
 
           <div className="modes" role="tablist" aria-label="입력 방식">
             <button type="button" className={mode === "text" ? "active" : ""} onClick={() => setMode("text")}>
