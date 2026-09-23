@@ -76,5 +76,10 @@ export function zipStored(files: { name: string; data: Uint8Array }[]): Blob {
     ...bytes16(0),
   ]);
 
-  return new Blob([...locals, ...central, end], { type: "application/zip" });
+  const parts = [...locals, ...central, end].map((part) => {
+    const copy = new ArrayBuffer(part.byteLength);
+    new Uint8Array(copy).set(part);
+    return copy;
+  });
+  return new Blob(parts, { type: "application/zip" });
 }
