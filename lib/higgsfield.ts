@@ -113,8 +113,8 @@ async function uploadImage(credentials: string, file: File): Promise<string> {
   if (!IMAGE_TYPES.has(file.type) && !IMAGE_TYPES.has(type)) {
     throw new HttpError(400, "이미지는 JPEG, PNG, WebP, GIF만 올릴 수 있습니다.");
   }
-  if (file.size > 15 * 1024 * 1024) {
-    throw new HttpError(400, "이미지는 15MB 이하만 올릴 수 있습니다.");
+  if (file.size > 4 * 1024 * 1024) {
+    throw new HttpError(400, "이미지는 4MB 이하만 올릴 수 있습니다.");
   }
   if (file.size === 0) {
     throw new HttpError(400, "빈 이미지 파일입니다.");

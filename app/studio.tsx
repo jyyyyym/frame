@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { zipStored } from "@/lib/zip";
 
 type Mode = "text" | "image";
 type JobStatus = "idle" | "queued" | "in_progress" | "completed" | "failed" | "nsfw" | "canceled";
@@ -75,6 +76,7 @@ export default function Studio() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
   const pollToken = useRef(0);
 
   const credentials = apiKey.trim();
@@ -240,8 +242,94 @@ export default function Studio() {
     }
   }
 
+  function fileNameFor(shot: Shot, index: number) {
+    const clean = shot.prompt.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 40) || "frame";
+    const ext = shot.videoUrl && /\.mov(\?|$)/i.test(shot.videoUrl) ? "mov" : "mp4";
+    return `${String(index + 1).padStart(2, "0")}-${clean}.${ext}`;
+  }
+
+  function saveBlob(blob: Blob, name: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  async function fetchVideo(shot: Shot): Promise<Blob> {
+    if (shot.videoUrl) {
+      try {
+        const direct = await fetch(shot.videoUrl);
+        const type = direct.headers.get("content-type") ?? "";
+        if (direct.ok && (type.startsWith("video/") || type === "application/octet-stream" || type === "")) {
+          return await direct.blob();
+        }
+      } catch {
+        // The file host may block the browser. Fall through to this site's download route.
+      }
+    }
+    if (!shot.requestId) {
+      throw new Error("이 영상 주소를 더 이상 찾을 수 없습니다.");
+    }
+    if (!credentials.includes(":")) {
+      throw new Error("영상을 받으려면 위의 API 키를 다시 넣어 주세요.");
+    }
+    const response = await fetch(`/api/download?requestId=${encodeURIComponent(shot.requestId)}`, {
+      headers: { "x-hf-credentials": credentials },
+    });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(data.error || "영상을 받지 못했습니다.");
+    }
+    return response.blob();
+  }
+
+  async function saveOne(shot: Shot) {
+    const index = Math.max(0, shots.findIndex((item) => item.id === shot.id));
+    setError("");
+    setSavingId(shot.id);
+    try {
+      saveBlob(await fetchVideo(shot), fileNameFor(shot, index));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "영상을 받지 못했습니다.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function saveAll() {
+    const ready = shots.filter((shot) => shot.status === "completed" && shot.videoUrl);
+    if (ready.length === 0) return;
+    setError("");
+    setSavingId("all");
+    try {
+      if (ready.length === 1) {
+        const index = shots.findIndex((item) => item.id === ready[0].id);
+        saveBlob(await fetchVideo(ready[0]), fileNameFor(ready[0], index));
+        return;
+      }
+      const files: { name: string; data: Uint8Array }[] = [];
+      for (const shot of ready) {
+        const index = shots.findIndex((item) => item.id === shot.id);
+        files.push({
+          name: fileNameFor(shot, index),
+          data: new Uint8Array(await (await fetchVideo(shot)).arrayBuffer()),
+        });
+      }
+      saveBlob(zipStored(files), "frame-videos.zip");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "영상을 받지 못했습니다.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   const prompts = mode === "text" ? TEXT_PROMPTS : IMAGE_PROMPTS;
   const running = active?.status === "queued" || active?.status === "in_progress";
+  const readyCount = shots.filter((shot) => shot.status === "completed" && shot.videoUrl).length;
 
   return (
     <main className="shell">
@@ -281,7 +369,7 @@ export default function Studio() {
                 {imageUrl ? <img src={imageUrl} alt="시작 프레임 미리보기" /> : null}
                 <span>
                   <strong>{image ? image.name : "시작 이미지"}</strong>
-                  <small>JPEG, PNG, WebP, GIF · 15MB 이하</small>
+                  <small>JPEG, PNG, WebP, GIF · 4MB 이하</small>
                 </span>
                 <input
                   type="file"
@@ -431,9 +519,9 @@ export default function Studio() {
           <div className="stage-head">
             <span>미리보기</span>
             {active?.videoUrl && (
-              <a href={active.videoUrl} download target="_blank" rel="noreferrer">
-                다운로드
-              </a>
+              <button type="button" onClick={() => void saveOne(active)} disabled={savingId !== null}>
+                {savingId === active.id ? "받는 중" : "다운로드"}
+              </button>
             )}
           </div>
           <div className="frame">
@@ -471,8 +559,12 @@ export default function Studio() {
       {shots.length > 0 && (
         <section className="history">
           <div className="history-head">
-            <span>이번 세션</span>
-            <span>{shots.length}</span>
+            <span>만든 영상</span>
+            {readyCount > 0 && (
+              <button className="ghost" type="button" onClick={() => void saveAll()} disabled={savingId !== null}>
+                {savingId === "all" ? "받는 중" : readyCount > 1 ? "모두 받기" : "받기"}
+              </button>
+            )}
           </div>
           <div className="strip">
             {shots.map((shot) => (
@@ -485,6 +577,16 @@ export default function Studio() {
                   )}
                   <p>{shot.prompt}</p>
                 </button>
+                {shot.videoUrl && (
+                  <button
+                    className="save"
+                    type="button"
+                    onClick={() => void saveOne(shot)}
+                    disabled={savingId !== null}
+                  >
+                    {savingId === shot.id ? "받는 중" : "다운로드"}
+                  </button>
+                )}
               </article>
             ))}
           </div>
