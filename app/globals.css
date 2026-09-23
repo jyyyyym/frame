@@ -59,13 +59,32 @@ a { color: var(--amber); }
   gap: 6px;
 }
 
+.brand-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.brand h1,
+.placeholder em {
+  font-family: "Pretendard Variable", Pretendard, sans-serif;
+}
+
 .brand h1 {
   margin: 0;
-  font-family: var(--font-display), Georgia, serif;
-  font-weight: 560;
-  font-size: 52px;
+  font-weight: 650;
+  font-size: clamp(28px, 3.4vw, 40px);
   letter-spacing: -0.04em;
-  line-height: 0.9;
+  line-height: 1.2;
+}
+
+.brand-title span {
+  font-family: "Pretendard Variable", Pretendard, sans-serif;
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -0.02em;
+  color: var(--muted);
 }
 
 .brand p {
@@ -425,9 +444,10 @@ input[type="range"] {
 }
 
 .placeholder em {
-  font-family: var(--font-display), Georgia, serif;
-  font-style: italic;
+  font-style: normal;
+  font-weight: 600;
   font-size: 28px;
+  letter-spacing: -0.03em;
   color: var(--ink);
   display: block;
   margin-bottom: 8px;
@@ -539,7 +559,7 @@ input[type="range"] {
 
 @media (max-width: 900px) {
   .layout, .key-grid, .drops { grid-template-columns: 1fr; }
-  .brand h1 { font-size: 42px; }
+  .brand h1 { font-size: 28px; }
   .topbar, .submit-row { flex-direction: column; align-items: stretch; }
   .shell { width: min(1180px, calc(100% - 20px)); }
   .stage { position: static; min-height: 420px; }

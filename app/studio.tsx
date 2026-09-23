@@ -351,7 +351,10 @@ export default function Studio() {
     <main className="shell">
       <header className="topbar">
         <div className="brand">
-          <h1>FRAME</h1>
+          <div className="brand-title">
+            <h1>AI시대의 서비스디자인</h1>
+            <span>2026, 이화여자대학교 디자인대학원</span>
+          </div>
           <p>텍스트나 이미지를 넣으면 Higgsfield가 영상을 만듭니다.</p>
         </div>
       </header>
