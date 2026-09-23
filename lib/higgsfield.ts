@@ -2,12 +2,25 @@ import { credentialProblem, normalizeCredentials } from "@/lib/credentials";
 
 const API = "https://api.higgsfield.ai";
 
-const TEXT_MODEL = "bytedance/seedance-2.5/text-to-video";
-const IMAGE_MODEL = "bytedance/seedance-2.5/image-to-video";
-
 const ASPECTS = new Set(["16:9", "4:3", "1:1", "3:4", "9:16", "21:9"]);
-const RESOLUTIONS = new Set(["480p", "720p"]);
 const FORMATS = new Set(["mp4", "mov"]);
+
+const ENGINES = {
+  "2.5": {
+    text: "bytedance/seedance-2.5/text-to-video",
+    image: "bytedance/seedance-2.5/image-to-video",
+    maxDuration: 30,
+    resolutions: new Set(["480p", "720p"]),
+    format: true,
+  },
+  "2.0": {
+    text: "bytedance/seedance-2.0/text-to-video",
+    image: "bytedance/seedance-2.0/image-to-video",
+    maxDuration: 15,
+    resolutions: new Set(["480p", "720p", "1080p", "4k"]),
+    format: false,
+  },
+} as const;
 const IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/jpg",
@@ -158,10 +171,10 @@ function readEnum(value: FormDataEntryValue | null, allowed: Set<string>, fallba
   return allowed.has(text) ? text : fallback;
 }
 
-function readDuration(value: FormDataEntryValue | null) {
+function readDuration(value: FormDataEntryValue | null, max: number) {
   const n = Number(typeof value === "string" ? value : "");
   if (!Number.isFinite(n)) return 5;
-  return Math.min(30, Math.max(4, Math.round(n)));
+  return Math.min(max, Math.max(4, Math.round(n)));
 }
 
 function readBool(value: FormDataEntryValue | null) {
@@ -170,20 +183,22 @@ function readBool(value: FormDataEntryValue | null) {
 
 export async function startGeneration(credentials: string, form: FormData) {
   const mode = form.get("mode") === "image" ? "image" : "text";
+  const engine = form.get("engine") === "2.0" ? ENGINES["2.0"] : ENGINES["2.5"];
   const prompt = String(form.get("prompt") ?? "").trim();
-  const duration = readDuration(form.get("duration"));
-  const resolution = readEnum(form.get("resolution"), RESOLUTIONS, "720p");
-  const outputFormat = readEnum(form.get("outputFormat"), FORMATS, "mp4");
+  const duration = readDuration(form.get("duration"), engine.maxDuration);
+  const resolution = readEnum(form.get("resolution"), engine.resolutions, "720p");
   const generateAudio = readBool(form.get("generateAudio"));
 
   const body: Record<string, unknown> = {
     duration,
     resolution,
-    output_format: outputFormat,
     generate_audio: generateAudio,
   };
+  if (engine.format) {
+    body.output_format = readEnum(form.get("outputFormat"), FORMATS, "mp4");
+  }
 
-  let path = `/${TEXT_MODEL}`;
+  let path = `/${engine.text}`;
 
   if (mode === "text") {
     if (!prompt) throw new HttpError(400, "영상으로 만들 문장을 입력해 주세요.");
@@ -200,7 +215,7 @@ export async function startGeneration(credentials: string, form: FormData) {
     if (end instanceof File && end.size > 0) {
       body.end_image_url = await uploadImage(credentials, end);
     }
-    path = `/${IMAGE_MODEL}`;
+    path = `/${engine.image}`;
   }
 
   const response = await higgsfield(credentials, path, {

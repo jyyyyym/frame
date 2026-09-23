@@ -65,7 +65,8 @@ export default function Studio() {
   const [prompt, setPrompt] = useState(TEXT_PROMPTS[0]);
   const [duration, setDuration] = useState(5);
   const [aspect, setAspect] = useState("16:9");
-  const [resolution, setResolution] = useState<"480p" | "720p">("720p");
+  const [engine, setEngine] = useState<"2.5" | "2.0">("2.5");
+  const [resolution, setResolution] = useState<"480p" | "720p" | "1080p" | "4k">("720p");
   const [format, setFormat] = useState<"mp4" | "mov">("mp4");
   const [audio, setAudio] = useState(true);
   const [image, setImage] = useState<File | null>(null);
@@ -200,6 +201,7 @@ export default function Studio() {
     try {
       const form = new FormData();
       form.set("mode", mode);
+      form.set("engine", engine);
       form.set("prompt", prompt.trim());
       form.set("duration", String(duration));
       form.set("resolution", resolution);
@@ -328,6 +330,19 @@ export default function Studio() {
     }
   }
 
+  const engineSpec = engine === "2.0"
+    ? { label: "Seedance 2.0", maxDuration: 15, resolutions: ["480p", "720p", "1080p", "4k"] as const }
+    : { label: "Seedance 2.5", maxDuration: 30, resolutions: ["480p", "720p"] as const };
+
+  function chooseEngine(next: "2.5" | "2.0") {
+    const spec = next === "2.0"
+      ? { maxDuration: 15, resolutions: ["480p", "720p", "1080p", "4k"] }
+      : { maxDuration: 30, resolutions: ["480p", "720p"] };
+    setEngine(next);
+    setDuration((current) => Math.min(current, spec.maxDuration));
+    setResolution((current) => (spec.resolutions.includes(current) ? current : "720p"));
+  }
+
   const prompts = mode === "text" ? TEXT_PROMPTS : IMAGE_PROMPTS;
   const running = active?.status === "queued" || active?.status === "in_progress";
   const readyCount = shots.filter((shot) => shot.status === "completed" && shot.videoUrl).length;
@@ -422,7 +437,7 @@ export default function Studio() {
 
           <div className="prompt-head">
             <span>{mode === "text" ? "프롬프트" : "움직임 설명"}</span>
-            <span>Seedance 2.5</span>
+            <span>{engineSpec.label}</span>
           </div>
           <textarea
             value={prompt}
@@ -445,15 +460,27 @@ export default function Studio() {
 
           <div className="controls">
             <div className="control-block">
+              <div className="label"><span>모델</span></div>
+              <div className="choices">
+                <button type="button" className={`choice ${engine === "2.5" ? "active" : ""}`} onClick={() => chooseEngine("2.5")}>
+                  Seedance 2.5
+                </button>
+                <button type="button" className={`choice ${engine === "2.0" ? "active" : ""}`} onClick={() => chooseEngine("2.0")}>
+                  Seedance 2.0
+                </button>
+              </div>
+            </div>
+
+            <div className="control-block">
               <div className="label">
                 <span>길이</span>
-                <span>{duration}초</span>
+                <span>{duration}초 · 최대 {engineSpec.maxDuration}초</span>
               </div>
               <input
                 type="range"
                 min={4}
-                max={30}
-                value={duration}
+                max={engineSpec.maxDuration}
+                value={Math.min(duration, engineSpec.maxDuration)}
                 onChange={(event) => setDuration(Number(event.target.value))}
               />
             </div>
@@ -477,19 +504,22 @@ export default function Studio() {
             )}
 
             <div className="control-block">
-              <div className="label"><span>화질 · 형식</span></div>
+              <div className="label">
+                <span>{engine === "2.0" ? "화질" : "화질 · 형식"}</span>
+                <span>{engine === "2.0" ? "1080p · 4K 가능" : "720p까지"}</span>
+              </div>
               <div className="choices">
-                {(["480p", "720p"] as const).map((item) => (
+                {engineSpec.resolutions.map((item) => (
                   <button
                     key={item}
                     type="button"
                     className={`choice ${resolution === item ? "active" : ""}`}
                     onClick={() => setResolution(item)}
                   >
-                    {item}
+                    {item === "4k" ? "4K" : item}
                   </button>
                 ))}
-                {(["mp4", "mov"] as const).map((item) => (
+                {engine === "2.5" && (["mp4", "mov"] as const).map((item) => (
                   <button
                     key={item}
                     type="button"
@@ -510,7 +540,7 @@ export default function Studio() {
 
           {error && <div className="banner" role="alert">{error}</div>}
           <div className="submit-row">
-            <p>영상은 초 단위로 과금됩니다. 4–5초로 먼저 시험해 보세요. ⌘Enter로도 만들 수 있습니다.</p>
+            <p>영상은 초 단위로 과금됩니다. 1080p와 4K는 Seedance 2.0에서만 되고 비용이 훨씬 큽니다.</p>
             <button className="primary large" type="button" onClick={() => void generate()} disabled={busy}>
               {busy ? "만드는 중" : "영상 만들기"}
             </button>
